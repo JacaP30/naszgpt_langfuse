@@ -56,7 +56,7 @@ def chatbot_reply(user_prompt, memory):
 
     response = openai_client.chat.completions.create(
         model=st.session_state["model"],
-        messages=messages
+        messages=messages  # type: ignore
     )
     usage = {}
     if response.usage:
