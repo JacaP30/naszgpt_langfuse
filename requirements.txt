@@ -1,4 +1,3 @@
-python==3.11.13
 openai==1.47.0
 langfuse
 streamlit
