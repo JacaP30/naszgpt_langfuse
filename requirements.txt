@@ -1,4 +1,4 @@
-openai==1.98.0
+openai==1.98.0 # było 1.47.0
 langfuse==2.40.0
 streamlit==1.24.0
 python-dotenv==1.1.1
