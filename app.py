@@ -406,7 +406,10 @@ def delete_conversation(conversation_id: int):
 def render_sidebar():
     """Renderuje sidebar z ustawieniami"""
     with st.sidebar:
-        st.image("background/logo.png", use_container_width=True)
+        # Wyświetl logo tylko jeśli plik istnieje
+        logo_path = Path("background/logo.png")
+        if logo_path.exists():
+            st.image("background/logo.png", use_container_width=True)
     
         st.markdown("## ⚙️ Ustawienia")
 
