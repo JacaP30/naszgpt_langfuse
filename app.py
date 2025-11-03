@@ -57,13 +57,20 @@ DB_CONVERSATIONS_PATH = DB_PATH / "conversations"
 # ==============================================================================
 #
 def load_environment():
-    """Ładuje zmienne środowiskowe z pliku .env"""
+    """Ładuje zmienne środowiskowe z pliku .env lub ze zmiennych środowiskowych"""
     # Ustaw zmienne środowiskowe dla Langfuse (musi być przed innymi operacjami)
     load_dotenv()
     
-    env = dotenv_values(".env")
+    # Najpierw sprawdź zmienne środowiskowe (działa na Streamlit Cloud)
+    env = dict(os.environ)
+    
+    # Jeśli istnieje plik .env, nadpisz zmienne środowiskowe wartościami z pliku
+    if Path(".env").exists():
+        file_env = dotenv_values(".env")
+        env.update(file_env)
+    
     if not env.get("OPENAI_API_KEY"):
-        st.error("❌ Brak klucza API OpenAI w pliku .env")
+        st.error("❌ Brak klucza API OpenAI. Ustaw OPENAI_API_KEY w Streamlit Secrets lub pliku .env")
         st.stop()
     
     # Informacje o konfiguracji Langfuse (opcjonalne, nie blokuje działania)
