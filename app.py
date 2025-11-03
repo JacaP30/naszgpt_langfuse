@@ -409,7 +409,11 @@ def render_sidebar():
         # Wyświetl logo tylko jeśli plik istnieje
         logo_path = Path("background/logo.png")
         if logo_path.exists():
-            st.image("background/logo.png", use_container_width=True)
+            try:
+                st.image("background/logo.png", use_container_width=True)
+            except TypeError:
+                # Fallback dla starszych wersji Streamlit
+                st.image("background/logo.png")
     
         st.markdown("## ⚙️ Ustawienia")
 
