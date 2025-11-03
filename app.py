@@ -1,6 +1,3 @@
-'''Pasek przewijania do knwersacji. nazwy elementów. 
-wybrać agentów i dorobić opisy. Wyczyścić konwersacje'''
-
 # CONDA ENVIRONMENT: app_nasz_gpt
 # IMPORTANT: Always run in app_nasz_gpt environment!
 
@@ -209,9 +206,18 @@ def chatbot_reply(user_prompt: str, memory: List[Dict], file_content: Optional[s
                 "response_time": elapsed,  # Dodaj czas odpowiedzi w sekundach
             }
         
+        # Sprawdź czy odpowiedź została obcięta z powodu limitu tokenów
+        choice = response.choices[0]
+        finish_reason = choice.finish_reason
+        content = choice.message.content or ""
+        
+        # Jeśli odpowiedź została obcięta (finish_reason == "length"), dodaj informację
+        if finish_reason == "length":
+            content += "\n\n⚠️ **Odpowiedź została obcięta** - osiągnięto limit tokenów. Zwiększ `max_completion_tokens` aby uzyskać pełną odpowiedź."
+        
         return {
             "role": "assistant",
-            "content": response.choices[0].message.content,
+            "content": content,
             "usage": usage,
         }
     

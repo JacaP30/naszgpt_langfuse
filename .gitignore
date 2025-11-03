@@ -4,3 +4,6 @@ app1.py
 db
 .vscode/
 36__instrukcja.ipynb
+__pycache__/
+*.pyc
+*.pyo
