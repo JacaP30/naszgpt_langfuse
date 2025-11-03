@@ -638,8 +638,34 @@ def main():
         page_icon="🤖",
         layout="wide",
         initial_sidebar_state="expanded"
+        menu_items={
+            'Get help': None,
+            'Report a bug': None,
+            'About': "## Twój czat GPT\n\nAplikacja chat GPT zintegrowana z Langfuse do monitorowania wywołań OpenAI."
+        }
     )
 
+HIDE_STREAMLIT_STYLE = """
+    <style>
+    /* Header, menu, stopka */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden; height: 0; position: fixed;}
+    .stDeployButton, [data-testid="stBaseButton-header"], [data-testid="stDecoration"] {display: none !important;}
+
+    /* PRAWY DOLNY RÓG — Manage app (Cloud) */
+    button[aria-label="Manage app"] {display: none !important;}
+    a[aria-label="Manage app"] {display: none !important;}
+    [data-testid="manageAppButton"] {display: none !important;}
+    [data-testid="stCloudManageApp"] {display: none !important;}
+    /* Fallback (gdyby a11y/aria się zmieniło) */
+    div[role="complementary"] [title="Manage app"] {display: none !important;}
+    </style>
+"""
+st.markdown(HIDE_STREAMLIT_STYLE, unsafe_allow_html=True)
+
+# ==============================================================================
     # Pobierz aktualny kurs USD/PLN (z cache) i zapisz datę kursu
     rate, rate_date = get_usd_to_pln_rate()
     global USD_TO_PLN
