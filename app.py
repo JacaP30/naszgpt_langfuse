@@ -7,6 +7,7 @@ import io
 from pathlib import Path
 from typing import Dict, List, Optional
 import streamlit as st
+from openai import OpenAI as OpenAINative  # walidacja klucza bez Langfuse
 from langfuse.openai import OpenAI  # Langfuse OpenAI wrapper dla automatycznego śledzenia
 from dotenv import load_dotenv, dotenv_values
 import PyPDF2
@@ -69,9 +70,7 @@ def load_environment():
         file_env = dotenv_values(".env")
         env.update(file_env)
     
-    if not env.get("OPENAI_API_KEY"):
-        st.error("❌ Brak klucza API OpenAI. Ustaw OPENAI_API_KEY w Streamlit Secrets lub pliku .env")
-        st.stop()
+    # Brak OPENAI_API_KEY nie przerywa — użytkownik może podać klucz na starcie lub wybrać tryb demo
     
     # Informacje o konfiguracji Langfuse (opcjonalne, nie blokuje działania)
     langfuse_keys = ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"]
@@ -80,6 +79,145 @@ def load_environment():
         st.warning(f"⚠️ Langfuse nie jest w pełni skonfigurowane - brakuje: {', '.join(missing_keys)}")
     
     return env
+
+
+def validate_openai_api_key(api_key: str) -> tuple[bool, str]:
+    """Sprawdza klucz przez lekkie wywołanie API (lista modeli). Zwraca (sukces, komunikat błędu)."""
+    key = (api_key or "").strip()
+    if not key:
+        return False, "Podaj niepusty klucz."
+
+    try:
+        client = OpenAINative(api_key=key)
+        client.models.list()
+        return True, ""
+    except Exception as e:
+        msg = str(e).strip()
+        lower = msg.lower()
+        if (
+            "401" in msg
+            or "incorrect api key" in lower
+            or "invalid api key" in lower
+            or "authentication" in lower
+            or "invalid_request_error" in lower and "key" in lower
+        ):
+            return False, "Klucz został odrzucony przez OpenAI — sprawdź, czy jest poprawny i aktywny."
+        return False, msg or "Nie udało się zweryfikować klucza."
+
+
+def get_raw_api_key(env: dict) -> str:
+    """Klucz z pola użytkownika ma pierwszeństwo; niepoprawny klucz z .env jest ignorowany do czasu poprawy."""
+    user_key = (st.session_state.get("user_api_key") or "").strip()
+    if user_key:
+        return user_key
+    env_key = (env.get("OPENAI_API_KEY") or "").strip()
+    ignored = (st.session_state.get("ignored_invalid_env_key") or "").strip()
+    if env_key and ignored and env_key == ignored:
+        return ""
+    return env_key
+
+
+def validate_openai_credentials(env: dict) -> None:
+    """Przy pierwszym żądaniu weryfikuje dostępny klucz (env lub sesja). Ustawia stan przy sukcesie lub odrzuceniu."""
+    if st.session_state.get("demo_mode"):
+        return
+
+    key = get_raw_api_key(env)
+    if not key:
+        st.session_state.pop("validated_openai_key", None)
+        return
+
+    if st.session_state.get("validated_openai_key") == key:
+        return
+
+    if st.session_state.get("rejected_api_key") == key:
+        return
+
+    with st.spinner("Sprawdzanie klucza OpenAI..."):
+        ok, err_msg = validate_openai_api_key(key)
+
+    if ok:
+        st.session_state.validated_openai_key = key
+        st.session_state.pop("rejected_api_key", None)
+        st.session_state.pop("ignored_invalid_env_key", None)
+        return
+
+    st.session_state.rejected_api_key = key
+    st.session_state.pop("validated_openai_key", None)
+
+    user_key = (st.session_state.get("user_api_key") or "").strip()
+    if user_key == key:
+        st.session_state.pop("user_api_key", None)
+    else:
+        st.session_state.ignored_invalid_env_key = key
+
+    st.error(f"Nieprawidłowy klucz API: {err_msg}")
+
+
+def needs_startup_configuration(env: dict) -> bool:
+    """True, gdy trzeba pokazać ekran startowy (brak działającego klucza lub tryb jeszcze nieustawiony)."""
+    if st.session_state.get("demo_mode"):
+        return False
+    key = get_raw_api_key(env)
+    if not key:
+        return True
+    return st.session_state.get("validated_openai_key") != key
+
+
+def render_startup_configuration(env: dict) -> None:
+    """Ekran startowy: klucz API lub tryb demo. Kończy wykonanie przez st.stop(), dopóki konfiguracja jest wymagana."""
+    if not needs_startup_configuration(env):
+        return
+
+    st.markdown("## Konfiguracja dostępu")
+    st.markdown(
+        "Aby korzystać z czatu, podaj **klucz API OpenAI** "
+        "(np. ze [strony OpenAI](https://platform.openai.com/api-keys)) "
+        "lub wybierz **tryb demo**, aby obejrzeć interfejs bez wywołań API."
+    )
+
+    col_key, col_demo = st.columns(2)
+
+    with col_key:
+        st.markdown("##### Klucz API")
+        api_key_input = st.text_input(
+            "OpenAI API key",
+            type="password",
+            placeholder="sk-...",
+            label_visibility="collapsed",
+            key="startup_api_key_field",
+        )
+        if st.button("Uruchom z kluczem", type="primary", use_container_width=True):
+            key = (api_key_input or "").strip()
+            if not key:
+                st.warning("Wpisz klucz API albo wybierz tryb demo.")
+            else:
+                with st.spinner("Sprawdzanie klucza OpenAI..."):
+                    ok, err_msg = validate_openai_api_key(key)
+                if ok:
+                    st.session_state.user_api_key = key
+                    os.environ["OPENAI_API_KEY"] = key
+                    st.session_state.demo_mode = False
+                    st.session_state.validated_openai_key = key
+                    st.session_state.pop("rejected_api_key", None)
+                    st.session_state.pop("ignored_invalid_env_key", None)
+                    st.rerun()
+                else:
+                    st.error(f"Klucz nie został zaakceptowany: {err_msg}")
+
+    with col_demo:
+        st.markdown("##### Tryb demo")
+        st.caption(
+            "Przeglądaj ustawienia, listę konwersacji i układ aplikacji. "
+            "Czat oraz wywołania modelu są wyłączone."
+        )
+        if st.button("Wejdź w tryb demo", use_container_width=True):
+            st.session_state.demo_mode = True
+            st.session_state.pop("rejected_api_key", None)
+            st.rerun()
+
+    st.stop()
+
 
 def extract_text_from_pdf(pdf_file) -> str:
     """Wyodrębnia tekst z pliku PDF"""
@@ -173,6 +311,16 @@ def get_usd_to_pln_rate() -> tuple[float, Optional[str]]:
 
 def chatbot_reply(user_prompt: str, memory: List[Dict], file_content: Optional[str] = None) -> Dict:
     """Generuje odpowiedź chatbota"""
+    if st.session_state.get("demo_mode") or not st.session_state.get("openai_client"):
+        return {
+            "role": "assistant",
+            "content": (
+                "**Tryb demo** — generowanie odpowiedzi wymaga klucza API OpenAI. "
+                "Uruchom ponownie aplikację i wybierz „Uruchom z kluczem”, aby korzystać z czatu."
+            ),
+            "usage": {},
+        }
+
     # Przygotowanie wiadomości systemowej
     system_content = st.session_state.get("chatbot_personality", DEFAULT_PERSONALITY)
     
@@ -200,7 +348,7 @@ def chatbot_reply(user_prompt: str, memory: List[Dict], file_content: Optional[s
                 model=st.session_state.selected_model,
                 messages=messages,
                 temperature=1,
-                max_completion_tokens=1000
+                max_completion_tokens=5000
             )
         elapsed = time.time() - start_time
         # Sprawdzenie użycia tokenów
@@ -406,6 +554,9 @@ def delete_conversation(conversation_id: int):
 def render_sidebar():
     """Renderuje sidebar z ustawieniami"""
     with st.sidebar:
+        if st.session_state.get("demo_mode"):
+            st.info("Tryb demo — czat i wywołania API są wyłączone.")
+
         # Wyświetl logo tylko jeśli plik istnieje
         logo_path = Path("background/logo.png")
         if logo_path.exists():
@@ -543,6 +694,12 @@ def render_main_chat():
     # druga linijka pod spodem w kolorze niebieskim
     st.markdown("<h2 style='color: #2575fc; text-align: center; font-size: 1em;'>Inteligentny asystent AI z możliwością wyboru modelu, wcielający się w wybraną osobowość. <br>Aplikacja pozwala dodawać załączniki i analizować na bieżąco koszt użycia zgodnie z aktualnym kursem USD</h2>", unsafe_allow_html=True)
 
+    if st.session_state.get("demo_mode"):
+        st.warning(
+            "Tryb demo — przeglądasz interfejs bez wywołań OpenAI. Pole czatu jest wyłączone; "
+            "możesz sprawdzać panel boczny, koszty (na zapisanych wiadomościach) i listę konwersacji."
+        )
+
     # Pobierz plik z session state jeśli istnieje
     file_content = st.session_state.get("uploaded_file_content", None)
     
@@ -590,7 +747,11 @@ def render_main_chat():
         
         with col2:
             # Input dla nowej wiadomości
-            user_input = st.chat_input("Zadaj pytanie...")
+            demo = st.session_state.get("demo_mode", False)
+            user_input = st.chat_input(
+                "Tryb demo — czat wyłączony" if demo else "Zadaj pytanie...",
+                disabled=demo,
+            )
     
     if user_input:
         # Dodaj wiadomość użytkownika
@@ -737,7 +898,14 @@ def main():
 
     # Inicjalizacja
     env = load_environment()
-    st.session_state.openai_client = OpenAI(api_key=env["OPENAI_API_KEY"])
+    validate_openai_credentials(env)
+    render_startup_configuration(env)
+
+    if st.session_state.get("demo_mode"):
+        st.session_state.openai_client = None
+    else:
+        api_key = get_raw_api_key(env)
+        st.session_state.openai_client = OpenAI(api_key=api_key)
 
     # Wczytaj konwersację
     if "conversation_id" not in st.session_state:
