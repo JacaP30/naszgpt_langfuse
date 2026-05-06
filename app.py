@@ -551,11 +551,20 @@ def delete_conversation(conversation_id: int):
 # UI FUNCTIONS
 # ==============================================================================
 
+def exit_demo_to_configure_key() -> None:
+    """Wyłącza tryb demo; przy następnym przebiegu pojawi się ekran wpisania klucza (jeśli nie ma ważnego klucza)."""
+    st.session_state.demo_mode = False
+    st.session_state.pop("rejected_api_key", None)
+    st.rerun()
+
+
 def render_sidebar():
     """Renderuje sidebar z ustawieniami"""
     with st.sidebar:
         if st.session_state.get("demo_mode"):
             st.info("Tryb demo — czat i wywołania API są wyłączone.")
+            if st.button("🔑 Wpisz klucz API", use_container_width=True, key="demo_enter_key_sidebar"):
+                exit_demo_to_configure_key()
 
         # Wyświetl logo tylko jeśli plik istnieje
         logo_path = Path("background/logo.png")
@@ -699,6 +708,8 @@ def render_main_chat():
             "Tryb demo — przeglądasz interfejs bez wywołań OpenAI. Pole czatu jest wyłączone; "
             "możesz sprawdzać panel boczny, koszty (na zapisanych wiadomościach) i listę konwersacji."
         )
+        if st.button("🔑 Wpisz klucz API", key="demo_enter_key_main"):
+            exit_demo_to_configure_key()
 
     # Pobierz plik z session state jeśli istnieje
     file_content = st.session_state.get("uploaded_file_content", None)
