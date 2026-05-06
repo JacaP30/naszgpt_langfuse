@@ -563,7 +563,12 @@ def render_sidebar():
     with st.sidebar:
         if st.session_state.get("demo_mode"):
             st.info("Tryb demo — czat i wywołania API są wyłączone.")
-            if st.button("🔑 Wpisz klucz API", use_container_width=True, key="demo_enter_key_sidebar"):
+            if st.button(
+                "🔑 Wpisz klucz API",
+                type="primary",
+                use_container_width=True,
+                key="demo_enter_key_sidebar",
+            ):
                 exit_demo_to_configure_key()
 
         # Wyświetl logo tylko jeśli plik istnieje
@@ -697,6 +702,20 @@ def render_main_chat():
         if st.button("❌ Zamknij błąd"):
             del st.session_state.error_message
             st.rerun()
+
+    # Tryb demo: wyraźny przycisk klucza nad tytułem (łatwo przeoczyć pod nagłówkiem strony)
+    if st.session_state.get("demo_mode"):
+        st.markdown(
+            '<p style="margin-bottom:0.35rem;font-size:0.95rem;color:#555;">Tryb demo — aby pisać z modelem, dodaj klucz OpenAI:</p>',
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "🔑 Wpisz klucz API",
+            type="primary",
+            use_container_width=True,
+            key="demo_enter_key_main_top",
+        ):
+            exit_demo_to_configure_key()
     
     # pierwsza linijka w kolorze gradientu  wyśrodkowany
     st.markdown("<h1 style='text-align: center; font-size: 5em; background: linear-gradient(to right, #6a11cb 25%, #2575fc 75%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 4px 10px #2575fc25, 0 4px 20px rgba(37, 117, 252, 0.35);'>🤖 Twój czat GPT</h1>", unsafe_allow_html=True)
@@ -708,8 +727,6 @@ def render_main_chat():
             "Tryb demo — przeglądasz interfejs bez wywołań OpenAI. Pole czatu jest wyłączone; "
             "możesz sprawdzać panel boczny, koszty (na zapisanych wiadomościach) i listę konwersacji."
         )
-        if st.button("🔑 Wpisz klucz API", key="demo_enter_key_main"):
-            exit_demo_to_configure_key()
 
     # Pobierz plik z session state jeśli istnieje
     file_content = st.session_state.get("uploaded_file_content", None)
@@ -820,12 +837,14 @@ def main():
 
     HIDE_STREAMLIT_STYLE = """
         <style>
-        /* Header, menu, stopka */
+        /* Menu ⋮, stopka, toolbar — bez ukrywania całego header:
+           w nagłówku jest przycisk rozwijania/zwijania sidebara; display:none na header
+           sprawiał, że po zwinięciu panelu nie dało się go przywrócić. */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        header {visibility: hidden;}
         [data-testid="stToolbar"] {visibility: hidden; height: 0; position: fixed;}
-        .stDeployButton, [data-testid="stBaseButton-header"], [data-testid="stDecoration"] {display: none !important;}
+        /* Nie ukrywaj stBaseButton-header — to często przycisk „Open sidebar” po zwinięciu */
+        .stDeployButton, [data-testid="stDecoration"] {display: none !important;}
 
         /* PRAWY DOLNY RÓG — Manage app (Cloud) */
         button[aria-label="Manage app"] {display: none !important;}
@@ -872,7 +891,9 @@ def main():
             border-radius: 10px;
             margin: 1rem 0;
         }
-        .stButton > button {
+        /* Pełna szerokość tylko w treści i sidebarze — nie w nagłówku Streamlit (menu panelu) */
+        section[data-testid="stSidebar"] .stButton > button,
+        .main .block-container .stButton > button {
             width: 100%;
             border-radius: 5px;
         }
